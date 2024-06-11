@@ -2,7 +2,9 @@ package network
 
 import (
 	"chat_server_go/types"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -45,6 +47,55 @@ func NewRoom() *Room {
 	}
 }
 
+func (c *client) Read() {
+	defer c.Socket.Close()
+	for {
+		var msg *message
+		err := c.Socket.ReadJSON(&msg)
+		if err != nil {
+			if !websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
+				break
+			} else {
+				panic(err)
+			}
+		} else {
+			log.Println("READ:", msg, "CLIENT:", c.Name)
+			msg.Time = time.Now().Unix()
+			msg.Name = c.Name
+
+			c.Room.Forward <- msg
+		}
+	}
+}
+
+func (c *client) Write() {
+	defer c.Socket.Close()
+	for msg := range c.Send {
+		log.Println("WRITE:", msg, "CLIENT:", c.Name)
+		err := c.Socket.WriteJSON(msg)
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (r *Room) RunInit() {
+	for {
+		select {
+		case client := <-r.Join:
+			r.Clients[client] = true
+		case client := <-r.Leave:
+			r.Clients[client] = false
+			close(client.Send)
+			delete(r.Clients, client)
+		case msg := <-r.Forward:
+			for client := range r.Clients {
+				client.Send <- msg
+			}
+		}
+	}
+}
+
 func (r *Room) SocketServe(c *gin.Context) {
 	socket, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -66,4 +117,8 @@ func (r *Room) SocketServe(c *gin.Context) {
 	r.Join <- client
 
 	defer func() { r.Leave <- client }()
+
+	go client.Write()
+
+	client.Read()
 }
