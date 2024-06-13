@@ -1,38 +1,47 @@
 package network
 
 import (
+	"chat_server_go/repository"
+	"chat_server_go/service"
 	"log"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
-type Network struct {
-	engin *gin.Engine
+type Server struct {
+	engine *gin.Engine
+
+	service    *service.Service
+	repository *repository.Repository
+
+	port string
+	ip   string
 }
 
-func NewServer() *Network {
-	n := &Network{engin: gin.New()}
+func NewServer(service *service.Service, repository *repository.Repository, port string) *Server {
+	s := &Server{engine: gin.New(), service: service, repository: repository, port: port}
 
-	n.engin.Use(gin.Logger())
-	n.engin.Use(gin.Recovery())
-	n.engin.Use(cors.New(cors.Config{
+	s.engine.Use(gin.Logger())
+	s.engine.Use(gin.Recovery())
+	s.engine.Use(cors.New(cors.Config{
 		AllowWebSockets:  true,
 		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT"},
-		AllowHeaders:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "PATCH"},
+		AllowHeaders:     []string{"ORIGIN", "Cotent-Length", "Content-Type", "Access-Control-Allow-Headers", "Access-Control-Allow-Origin", "Authorization", "X-Requested-With", "expires"},
+		ExposeHeaders:    []string{"ORIGIN", "Cotent-Length", "Content-Type", "Access-Control-Allow-Headers", "Access-Control-Allow-Origin", "Authorization", "X-Requested-With", "expires"},
 		AllowCredentials: true,
+		AllowOriginFunc: func(origin string) bool {
+			return true
+		},
 	}))
 
-	r := NewRoom()
-	go r.RunInit()
+	registerServer(s)
 
-	n.engin.GET("/room", r.SocketServe)
-
-	return n
+	return s
 }
 
-func (n *Network) StartServer() error {
-	log.Println("Starting Server!")
-	return n.engin.Run(":8080")
+func (s *Server) StartServer() error {
+	log.Println("Starting Server! port:", s.port)
+	return s.engine.Run(s.port)
 }

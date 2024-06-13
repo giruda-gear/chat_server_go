@@ -79,7 +79,7 @@ func (c *client) Write() {
 	}
 }
 
-func (r *Room) RunInit() {
+func (r *Room) Run() {
 	for {
 		select {
 		case client := <-r.Join:
@@ -96,13 +96,18 @@ func (r *Room) RunInit() {
 	}
 }
 
-func (r *Room) SocketServe(c *gin.Context) {
-	socket, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		panic(err)
+// SocketServe
+func (r *Room) ServeHttp(c *gin.Context) {
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		return true
 	}
 
-	userCookie, err := c.Request.Cookie("auth")
+	socket, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Fatalln("---- serveHttp:", err)
+	}
+
+	authCookie, err := c.Request.Cookie("auth")
 	if err != nil {
 		panic(err)
 	}
@@ -111,7 +116,7 @@ func (r *Room) SocketServe(c *gin.Context) {
 		Socket: socket,
 		Send:   make(chan *message, types.MessageBufferSize),
 		Room:   r,
-		Name:   userCookie.Value,
+		Name:   authCookie.Value,
 	}
 
 	r.Join <- client
