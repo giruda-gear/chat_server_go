@@ -1,6 +1,7 @@
 package network
 
 import (
+	"chat_server_go/service"
 	"chat_server_go/types"
 	"log"
 	"net/http"
@@ -17,37 +18,38 @@ var upgrader = &websocket.Upgrader{
 }
 
 type Room struct {
-	Forward chan *message // send messages to clients
-
-	Join  chan *client // when socket is connected
-	Leave chan *client // when socket is disconnected
-
-	Clients map[*client]bool
+	Forward chan *message // send messages to Clients
+	Join    chan *Client  // when socket is connected
+	Leave   chan *Client  // when socket is disconnected
+	Clients map[*Client]bool
+	service *service.Service
 }
 
 type message struct {
-	Name    string
-	Message string
-	Time    int64
+	Name      string `json:"name"`
+	Message   string `json:"message"`
+	Room      string `json:"room"`
+	CreatedAt int64  `json:"createdAt"`
 }
 
-type client struct {
+type Client struct {
+	Socket *websocket.Conn
 	Send   chan *message
 	Room   *Room
-	Name   string
-	Socket *websocket.Conn
+	Name   string `json:"name"`
 }
 
-func NewRoom() *Room {
+func NewRoom(service *service.Service) *Room {
 	return &Room{
 		Forward: make(chan *message),
-		Join:    make(chan *client),
-		Leave:   make(chan *client),
-		Clients: make(map[*client]bool),
+		Join:    make(chan *Client),
+		Leave:   make(chan *Client),
+		Clients: make(map[*Client]bool),
+		service: service,
 	}
 }
 
-func (c *client) Read() {
+func (c *Client) Read() {
 	defer c.Socket.Close()
 	for {
 		var msg *message
@@ -60,7 +62,7 @@ func (c *client) Read() {
 			}
 		} else {
 			log.Println("READ:", msg, "CLIENT:", c.Name)
-			msg.Time = time.Now().Unix()
+			msg.CreatedAt = time.Now().Unix()
 			msg.Name = c.Name
 
 			c.Room.Forward <- msg
@@ -68,7 +70,7 @@ func (c *client) Read() {
 	}
 }
 
-func (c *client) Write() {
+func (c *Client) Write() {
 	defer c.Socket.Close()
 	for msg := range c.Send {
 		log.Println("WRITE:", msg, "CLIENT:", c.Name)
@@ -82,21 +84,22 @@ func (c *client) Write() {
 func (r *Room) Run() {
 	for {
 		select {
-		case client := <-r.Join:
-			r.Clients[client] = true
-		case client := <-r.Leave:
-			r.Clients[client] = false
-			close(client.Send)
-			delete(r.Clients, client)
+		case Client := <-r.Join:
+			r.Clients[Client] = true
+		case Client := <-r.Leave:
+			r.Clients[Client] = false
+			close(Client.Send)
+			delete(r.Clients, Client)
 		case msg := <-r.Forward:
-			for client := range r.Clients {
-				client.Send <- msg
+			go r.service.InsertChatting(msg.Name, msg.Message, msg.Room)
+
+			for Client := range r.Clients {
+				Client.Send <- msg
 			}
 		}
 	}
 }
 
-// SocketServe
 func (r *Room) ServeHttp(c *gin.Context) {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		return true
@@ -112,18 +115,18 @@ func (r *Room) ServeHttp(c *gin.Context) {
 		panic(err)
 	}
 
-	client := &client{
+	Client := &Client{
 		Socket: socket,
 		Send:   make(chan *message, types.MessageBufferSize),
 		Room:   r,
 		Name:   authCookie.Value,
 	}
 
-	r.Join <- client
+	r.Join <- Client
 
-	defer func() { r.Leave <- client }()
+	defer func() { r.Leave <- Client }()
 
-	go client.Write()
+	go Client.Write()
 
-	client.Read()
+	Client.Read()
 }

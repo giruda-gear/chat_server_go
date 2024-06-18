@@ -15,14 +15,14 @@ func registerServer(server *Server) {
 	a := &api{server: server}
 
 	server.engine.GET("/rooms", a.roomList)
-	server.engine.POST("/room", a.makeRoom)
 	server.engine.GET("/room", a.room)
 	server.engine.GET("/enter-room", a.enterRoom)
+	server.engine.POST("/room", a.makeRoom)
 
-	// r := NewRoom()
-	// go r.Run()
+	r := NewRoom(server.service)
+	go r.Run()
 
-	// server.engine.GET("/room", r.ServeHttp)
+	server.engine.GET("/room-chat", r.ServeHttp)
 }
 
 func (a *api) roomList(c *gin.Context) {
