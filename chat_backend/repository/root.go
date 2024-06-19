@@ -2,6 +2,7 @@ package repository
 
 import (
 	"chat_server_go/config"
+	"chat_server_go/repository/kafka"
 	"chat_server_go/types/schema"
 	"database/sql"
 	"log"
@@ -14,6 +15,8 @@ type Repository struct {
 	cfg *config.Config
 
 	db *sql.DB
+
+	Kafka *kafka.Kafka
 }
 
 const (
@@ -28,9 +31,19 @@ func NewRepository(cfg *config.Config) (*Repository, error) {
 
 	if r.db, err = sql.Open(cfg.DB.Database, cfg.DB.URL); err != nil {
 		return nil, err
+	} else if r.Kafka, err = kafka.NewKafka(cfg); err != nil {
+		return nil, err
 	} else {
 		return r, nil
 	}
+}
+
+func (s *Repository) ServerSet(ip string, available bool) error {
+	_, err := s.db.Exec("INSERT INTO serverInfo(`ip`, `available`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `available` = VALUES(`available`)",
+		ip, available,
+	)
+
+	return err
 }
 
 func (s *Repository) InsertChatting(user, message, roomName string) error {

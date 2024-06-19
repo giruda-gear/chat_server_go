@@ -2,15 +2,6 @@ package types
 
 import "strings"
 
-const (
-	SocketBufferSize  = 1024
-	MessageBufferSize = 256
-)
-
-type LoginReq struct {
-	Name string `json:"name" binding:"required"`
-}
-
 type header struct {
 	Result int    `json:"result"`
 	Data   string `json:"data"`

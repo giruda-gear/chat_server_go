@@ -2,7 +2,6 @@ package network
 
 import (
 	"chat_server_go/service"
-	"chat_server_go/types"
 	"log"
 	"net/http"
 	"time"
@@ -11,9 +10,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	socketBufferSize  = 1024
+	messageBufferSize = 256
+)
+
 var upgrader = &websocket.Upgrader{
-	ReadBufferSize:  types.SocketBufferSize,
-	WriteBufferSize: types.MessageBufferSize,
+	ReadBufferSize:  socketBufferSize,
+	WriteBufferSize: messageBufferSize,
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
@@ -117,7 +121,7 @@ func (r *Room) ServeHttp(c *gin.Context) {
 
 	Client := &Client{
 		Socket: socket,
-		Send:   make(chan *message, types.MessageBufferSize),
+		Send:   make(chan *message, messageBufferSize),
 		Room:   r,
 		Name:   authCookie.Value,
 	}
